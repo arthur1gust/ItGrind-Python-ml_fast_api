@@ -1,9 +1,12 @@
-from pydantic import BaseModel
 from typing import Any, Literal
-from pydantic import Field
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FeatureVectorChurn(BaseModel):
+    # Лишние признаки — ошибка 422, а не незаметное игнорирование.
+    model_config = ConfigDict(extra="forbid")
+
     monthly_fee: float
     usage_hours: float
     support_requests: int
@@ -21,45 +24,27 @@ class DatasetRowChurn(FeatureVectorChurn):
 
 class PredictionResponseChurn(BaseModel):
     churn: Literal[0, 1] = Field(
-        description=(
-            "Предсказанный класс: "
-            "0 - останется, 1 - уйдёт"
-        )
+        description="Предсказанный класс: 0 — останется, 1 — уйдёт"
     )
-
     probabilities: dict[str, float] = Field(
-        description=(
-            "Оценки вероятностей классов 0 и 1"
-        )
+        description="Вероятности классов 0 и 1"
     )
 
     model_config = {
         "json_schema_extra": {
             "examples": [
-                {
-                    "churn": 1,
-                    "probabilities": {
-                        "0": 0.18,
-                        "1": 0.82,
-                    },
-                }
+                {"churn": 1, "probabilities": {"0": 0.18, "1": 0.82}}
             ]
         }
     }
 
 
 class TrainingConfigChurn(BaseModel):
-    model_type: Literal[
-        "logreg",
-        "random_forest"
-    ] = Field(
-        default="logreg",
-        description="Тип ML-модели",
+    model_type: Literal["logreg", "random_forest"] = Field(
+        default="logreg", description="Тип ML-модели"
     )
-
     hyperparameters: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Гиперпараметры классификатора",
+        default_factory=dict, description="Гиперпараметры классификатора"
     )
 
     model_config = {
@@ -67,10 +52,7 @@ class TrainingConfigChurn(BaseModel):
             "examples": [
                 {
                     "model_type": "random_forest",
-                    "hyperparameters": {
-                        "n_estimators": 150,
-                        "max_depth": 8,
-                    },
+                    "hyperparameters": {"n_estimators": 150, "max_depth": 8},
                 }
             ]
         }

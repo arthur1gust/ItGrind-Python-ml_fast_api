@@ -1,12 +1,12 @@
-
 import numpy as np
 import pandas as pd
-
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+from schemas import FeatureVectorChurn
 
 
 NUMERIC_FEATURES = [
@@ -24,106 +24,79 @@ CATEGORICAL_FEATURES = [
     "payment_method",
 ]
 
+# Одна и та же последовательность для train/test и POST /predict.
 FEATURE_COLUMNS = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 
-def prepare_data(df: pd.DataFrame):
-    """Отделяем признаки X от целевой переменной y."""
-
-    required = FEATURE_COLUMNS + ["churn"]
-
-    missing = [
-        name for name in required
-        if name not in df.columns
-    ]
-
+def prepare_feature_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Проверяем набор полей и приводим их к общему порядку и типам."""
+    missing = [name for name in FEATURE_COLUMNS if name not in df.columns]
     if missing:
-        raise ValueError(
-            f"Отсутствуют столбцы: {missing}"
-        )
+        raise ValueError(f"Отсутствуют признаки: {missing}")
 
+    X = df.loc[:, FEATURE_COLUMNS].copy()
+
+    for name in NUMERIC_FEATURES:
+        X[name] = pd.to_numeric(X[name], errors="raise")
+
+    for name in CATEGORICAL_FEATURES:
+        X[name] = X[name].astype(object)
+        X[name] = X[name].where(X[name].notna(), np.nan)
+
+    return X
+
+
+def prepare_data(df: pd.DataFrame):
+    """Разделяем табличные данные на X и y, не обучая преобразования."""
     if df.empty:
         raise ValueError("Датасет пуст")
-
+    if "churn" not in df.columns:
+        raise ValueError("Отсутствует столбец churn")
     if df["churn"].isna().any():
-        raise ValueError(
-            "Пропуски в churn недопустимы"
-        )
+        raise ValueError("Пропуски в churn недопустимы")
 
-    X = df[FEATURE_COLUMNS].copy()
+    X = prepare_feature_dataframe(df)
     y = pd.to_numeric(df["churn"], errors="raise")
-
     if not y.isin([0, 1]).all():
-        raise ValueError(
-            "churn должен содержать только 0 и 1"
-        )
+        raise ValueError("churn должен содержать только 0 и 1")
 
-    y = y.astype(int)
+    return X, y.astype(int)
 
-    # Приводим числовые признаки к числам
-    for column in NUMERIC_FEATURES:
-        X[column] = pd.to_numeric(
-            X[column], errors="raise"
-        )
 
-    # Приводим пропуски категорий к np.nan
-    for column in CATEGORICAL_FEATURES:
-        X[column] = X[column].astype(object)
-        X.loc[X[column].isna(), column] = np.nan
+def prepare_prediction_data(
+    features: FeatureVectorChurn | list[FeatureVectorChurn],
+) -> pd.DataFrame:
+    """Преобразуем один или несколько проверенных объектов в X для Pipeline."""
+    clients = features if isinstance(features, list) else [features]
+    if not clients:
+        raise ValueError("Список клиентов не должен быть пустым")
 
-    return X, y
+    records = [client.model_dump() for client in clients]
+    return prepare_feature_dataframe(pd.DataFrame.from_records(records))
 
 
 def split_data(df: pd.DataFrame):
-    """Разделяем данные на train и test."""
-
     X, y = prepare_data(df)
-
     return train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        random_state=42,
-        stratify=y,
+        X, y, test_size=0.2, random_state=42, stratify=y,
     )
 
 
-def build_preprocessor():
-    """Создаём правила предобработки признаков."""
-
+def build_preprocessor() -> ColumnTransformer:
     numeric_pipeline = Pipeline([
-        (
-            "imputer",
-            SimpleImputer(strategy="median"),
-        ),
-        (
-            "scaler",
-            StandardScaler(),
-        ),
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler()),
     ])
 
     categorical_pipeline = Pipeline([
-        (
-            "imputer",
-            SimpleImputer(strategy="most_frequent"),
-        ),
-        (
-            "onehot",
-            OneHotEncoder(handle_unknown="ignore"),
-        ),
+        ("imputer", SimpleImputer(strategy="most_frequent")),
+        ("onehot", OneHotEncoder(handle_unknown="ignore")),
     ])
 
     return ColumnTransformer(
         transformers=[
-            (
-                "num",
-                numeric_pipeline,
-                NUMERIC_FEATURES,
-            ),
-            (
-                "cat",
-                categorical_pipeline,
-                CATEGORICAL_FEATURES,
-            ),
-        ]
+            ("num", numeric_pipeline, NUMERIC_FEATURES),
+            ("cat", categorical_pipeline, CATEGORICAL_FEATURES),
+        ],
+        remainder="drop",
     )

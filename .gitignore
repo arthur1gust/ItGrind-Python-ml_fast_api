@@ -17,3 +17,5 @@ __pycache__/
 # Saved ML models
 models/*.joblib
 models/*.pkl
+
+models/training_history.json
