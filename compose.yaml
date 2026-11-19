@@ -1,0 +1,17 @@
+services:
+  churn:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ml-fastapi-churn:day13
+    ports:
+      - "8000:8000"
+    environment:
+      LOG_LEVEL: INFO
+    volumes:
+      - ./data:/app/data:ro
+      - churn-models:/app/models
+    restart: unless-stopped
+
+volumes:
+  churn-models:

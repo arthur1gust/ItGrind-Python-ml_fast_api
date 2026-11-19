@@ -1,21 +1,17 @@
-# Virtual environment
 .venv/
 venv/
-
-# IDE
 .idea/
-
-# Python cache
+.vscode/
 __pycache__/
-*.pyc
+*.py[cod]
 .pytest_cache/
-
-# Environment variables
+.coverage
+htmlcov/
 .env
 .env.*
-
-# Saved ML models
+!.env.example
+*.log
 models/*.joblib
-models/*.pkl
-
 models/training_history.json
+data/churn_dataset.csv
+!data/churn_dataset.example.csv
